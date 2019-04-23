@@ -1,0 +1,20 @@
+galaxy_info:
+  author: Mohit Sharma
+  description: Ansible role for installing docker and setting up swarm
+  company: NYU CUSP
+
+  license: MIT
+
+  min_ansible_version: 2.4
+
+  platforms:
+  - name: Ubuntu
+    versions:
+      - bionic
+      - xenial
+      - trusty
+
+  galaxy_tags:
+    - development
+    - system
+    - docker

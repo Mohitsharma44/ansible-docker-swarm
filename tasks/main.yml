@@ -1,0 +1,15 @@
+---
+# tasks file for docker-swarm
+
+- include_tasks: setup-debian.yml
+  when: ansible_os_family == 'Debian'
+
+- include_tasks: install-docker.yml
+
+- include_tasks: install_docker-compose.yml
+
+- include_tasks: dockerusers.yml
+
+- include_tasks: setup-swarm.yml
+
+- include_tasks: swarm-label.yml

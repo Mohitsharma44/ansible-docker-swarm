@@ -1,0 +1,90 @@
+---
+
+- name: Make sure Docker is running
+  service:
+    name: docker
+    state: started
+
+- name: Get swarm state
+  command: >-
+    docker info -f {% raw %}'{{ .Swarm.LocalNodeState }}'{% endraw %}
+  changed_when: false
+  register: docker_swarm_state
+
+- name: Gathering Swarm State and Facts
+  set_fact:
+    docker_node_active: "{{ docker_swarm_state.stdout == 'active' }}"
+    docker_node_pending: "{{ docker_swarm_state.stdout == 'pending' }}"
+    docker_swarm_addr: "{{ vars['ansible_' + docker_swarm_network_interface]['ipv4']['address'] }}"
+
+- name: Initialize Swarm on one of the Managers
+  command: >-
+    docker swarm init --listen-addr {{ docker_swarm_addr }}:{{ docker_swarm_port }} --advertise-addr {{ docker_swarm_addr }}
+  when:
+    - not docker_node_active
+    - not docker_node_pending
+    - inventory_hostname == docker_swarm_primary_manager_name
+
+- name: Get Swarm join token for workers
+  command: >-
+    docker swarm join-token -q worker
+  register: docker_swarm_worker_token
+  delegate_to: "{{ docker_swarm_primary_manager_name }}"
+  delegate_facts: true
+  when:
+    - not docker_node_active
+    - not docker_node_pending
+    #- inventory_hostname == docker_swarm_primary_manager_name
+    - "'docker_swarm_worker' in group_names"
+
+- name: Get Swarm join token for managers
+  command: >-
+    docker swarm join-token -q manager
+  register: docker_swarm_manager_token
+  delegate_to: "{{ docker_swarm_primary_manager_name }}"
+  delegate_facts: true
+  when:
+    - not docker_node_active
+    - not docker_node_pending
+    - "'docker_swarm_manager' in group_names"
+    #- inventory_hostname != docker_swarm_primary_manager_name
+
+- name: Setting Primary Node Address as a fact
+  set_fact:
+    docker_primary_node_addr: >-
+      {{ hostvars[docker_swarm_primary_manager_name]['docker_swarm_addr'] }}
+
+- debug:
+    msg: >
+      "docker_swarm_worker_token: {{ docker_swarm_worker_token }} \n
+       docker_node_active: {{ docker_node_active }} \n
+       docker_node_pending: {{ docker_node_pending }} \n
+       docker_swarm_addr: {{ docker_swarm_addr }} \n
+       docker_swarm_port: {{ docker_swarm_port }} \n
+       docker_primary_node_addr: {{ docker_primary_node_addr }} \n
+       docker_swarm_port: {{ docker_swarm_port }}"
+
+- name: Joining all workers
+  command: >-
+    docker swarm join \
+    --advertise-addr {{ docker_swarm_addr }} \
+    --listen-addr {{ docker_swarm_addr }}:{{ docker_swarm_port }} \
+    --token {{ docker_swarm_worker_token.stdout }} \
+    {{ docker_primary_node_addr }}:{{ docker_swarm_port }}
+  when:
+    - not docker_node_active
+    - not docker_node_pending
+    - "'docker_swarm_worker' in group_names"
+
+- name: Joining all remaining Managers
+  command: >-
+    docker swarm join \
+    --advertise-addr {{ docker_swarm_addr }} \
+    --listen-addr {{ docker_swarm_addr }}:{{ docker_swarm_port }} \
+    --token {{ docker_swarm_manager_token.stdout }} \
+    {{ docker_primary_node_addr }}:{{ docker_swarm_port }}
+  when:
+    - not docker_node_active
+    - not docker_node_pending
+    - "'docker_swarm_manager' in group_names"
+    - inventory_hostname != docker_swarm_primary_manager_name
