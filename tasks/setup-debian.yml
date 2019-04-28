@@ -34,7 +34,6 @@
 
 - name: Adding Docker key using CURL if adding docker key using apt_key fails
   shell: |
-    set -o pipefail
     curl -sSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
   args:
     warn: false
